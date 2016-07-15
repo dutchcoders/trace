@@ -1,0 +1,1 @@
+curl -q http://docs.cs.up.ac.za/programming/asm/derick_tut/syscalls.html|grep -o -E "<tr><td>\d+</td><td>sys_[a-z]+</td>"|sed -E "s/<tr><td>([[:digit:]]+)<\/td><td>(.+)<\/td>/\1 => { \"\2\" }/"|pbcopy

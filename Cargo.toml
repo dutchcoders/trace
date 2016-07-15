@@ -1,0 +1,19 @@
+[package]
+name = "tracer"
+version = "0.1.0"
+authors = ["Remco <remco@dutchcoders.io>"]
+
+[dependencies]
+nix = "0.6.0"
+libc = "0.2.14"
+capstone = "0.0.4"
+byteorder = "0.5"
+serde = "*"
+serde_json = "*"
+serde_macros = "*"
+docopt = "0.6.81"
+rustc-serialize = "*"
+ansi_term = "0.7"
+dwarf = "0.0.3"
+memmap = "*"
+scan_fmt = "*"
