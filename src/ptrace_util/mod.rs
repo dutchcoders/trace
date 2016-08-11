@@ -1,3 +1,5 @@
+extern crate std;
+
 use libc::pid_t;
 use nix::sys::ptrace::*;
 use nix::sys::ptrace::ptrace::*;
@@ -6,14 +8,16 @@ use libc::c_void;
 use std::str;
 
 use inferior::InferiorPointer;
+use std::slice;
+
+use std::mem;
 
 use libc::wait;
 use libc::c_int;
 use libc::WIFSTOPPED;
 use std::fs::{self, File};
-
-use std::io::{Read, Seek, SeekFrom};
-
+use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom};
+use std::ffi::CString;
 
 pub mod user {
     pub mod regs {
@@ -51,7 +55,7 @@ pub mod user {
 
 pub struct Process {
     pub pid: pid_t,
-    pub memfile: fs::File,
+    pub memfile: BufReader<fs::File>,
 }
 
 impl Process {
@@ -62,9 +66,11 @@ impl Process {
             .create(false)
             .open(format!("/proc/{:}/mem", pid)).unwrap();
 
+        let mut reader = BufReader::new(memfile);
+
         Process{
             pid: pid,
-            memfile: memfile,
+            memfile: reader,
         }
     }
 
@@ -103,6 +109,51 @@ impl Process {
         ptrace(PTRACE_PEEKTEXT, self.pid, address.as_voidptr(), ptr::null_mut())
             .ok()
             .expect("Failed PTRACE_PEEKTEXT")
+    }
+
+    pub fn read_struct<T>(&mut self, address: InferiorPointer) -> io::Result<T> {
+        self.memfile.seek(SeekFrom::Start(address.as_voidptr() as u64)).expect("seek");
+
+        let num_bytes = ::std::mem::size_of::<T>();
+        unsafe {
+            let mut s = ::std::mem::uninitialized();
+            let mut buffer = slice::from_raw_parts_mut(&mut s as *mut T as *mut u8, num_bytes);
+            match self.memfile.read_exact(buffer) {
+                Ok(()) => Ok(s),
+                Err(e) => {
+                    ::std::mem::forget(s);
+                    Err(e)
+                }
+            }
+        }
+    }
+
+/*
+    pub fn struct_at<A, B>(&mut self, address: InferiorPointer)  -> Result<String, ()> {
+        let mut str2 : A = unsafe {std::mem::uninitialized()};
+        unsafe {
+            let mut buf = Vec::with_capacity(std::mem::size_of::<A>());
+            self.memfile.read(&buf );
+
+            // memfile.seek(p.as_voidptr() as usize, io::SeekFrom::Start);
+
+            let x2 : A = mem::transmute(&mut str2);
+            self.memfile.seek(SeekFrom::Start(address.as_voidptr() as u64)).expect("seek");
+                // process.peek_text_bytes(strtab, std::mem::transmute::<&mut u32, &mut [u8; 4]>(&mut str2)); 
+            let mut buf = std::mem::transmute::<&A, *mut u8>(&mut str2);
+            self.memfile.read(buf as &mut[u8]);
+        }
+        Ok(String::from("test"))
+    }
+*/
+
+    pub fn string_at(&mut self, address: InferiorPointer)  -> Result<CString, ()> {
+        self.memfile.seek(SeekFrom::Start(address.as_voidptr() as u64)).expect("seek");
+
+        let mut buf = Vec::<u8>::new();
+        self.memfile.read_until(b'\0', &mut buf).expect("read_until failed");
+
+        Ok(unsafe { CString::from_vec_unchecked(buf) })
     }
 
     pub fn peek_text_bytes(&mut self, address: InferiorPointer, bytes: &mut [u8])  {
