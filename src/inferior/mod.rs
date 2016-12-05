@@ -6,6 +6,8 @@ use libc::c_void;
 use std::fmt;
 use std::ops::{Add, Sub};
 
+pub type TrapInferior = pid_t;
+
 #[derive(Copy, Clone)]
 pub enum InferiorState {
     Running,
@@ -18,8 +20,6 @@ pub struct Inferior {
     pub pid: pid_t,
     pub state: InferiorState,
 }
-
-pub type TrapInferior = pid_t;
 
 #[derive(Copy, Clone)]
 pub struct InferiorPointer(pub u64);

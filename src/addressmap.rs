@@ -1,5 +1,5 @@
-use std::fs::{self, File};
-use std::io::{self, BufReader};
+use std::fs::{File};
+use std::io::{BufReader};
 use std::io::prelude::*;
 
 use libc::pid_t;

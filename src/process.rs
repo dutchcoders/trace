@@ -1,7 +1,8 @@
 use ptrace_util::Process;
-use inferior::*;
 use elftools::*;
 use std::collections::HashMap;
+use inferior::InferiorPointer;
+use std::mem;
 
 impl Process {
     pub fn is_elf(&mut self) -> bool {
@@ -10,7 +11,7 @@ impl Process {
         let mut elf_header: [u8; 4] = [0, 0, 0, 0];
         self.peek_text_bytes(base_addr, &mut elf_header[0..]);
 
-        return (elf_header == [b'\x7f', b'E', b'L', b'F'])
+        elf_header == [b'\x7f', b'E', b'L', b'F']
     }
 
     pub fn ehdr(&mut self) -> Result<Elf64_Ehdr, ()> {
@@ -21,7 +22,7 @@ impl Process {
     }
 
     pub fn program_headers(&mut self) -> Result< HashMap<Elf64_Word, Elf64_Phdr>, ()> {
-        let mut ehdr = self.ehdr().unwrap();
+        let ehdr = self.ehdr().unwrap();
         let base_addr = InferiorPointer(0x400000);
 
         let mut program_headers: HashMap<Elf64_Word, Elf64_Phdr> = HashMap::new();
@@ -35,5 +36,30 @@ impl Process {
         }
 
         Ok(program_headers)
+    }
+
+    pub fn sections(&mut self, tag: i32 ) -> Result< Vec<InferiorPointer>, () > {
+        let mut program_headers: HashMap<Elf64_Word, Elf64_Phdr> = self.program_headers().unwrap();
+
+        let dynamic_section = program_headers.get(&(PT_DYNAMIC as Elf64_Word))
+            .expect("pt_dynamic not found");
+
+        let mut s = vec![];
+
+        let mut dyn_addr = InferiorPointer(dynamic_section.p_vaddr as u64);
+
+        loop {
+            let dyn = self.read_struct::<Elf64_Dyn>(dyn_addr).expect("dyn");
+
+            if dyn.d_tag == 0 {
+                break;
+            } else if dyn.d_tag == tag as i64 {
+                s.push(InferiorPointer(dyn.d_ptr as u64))
+            }
+
+            dyn_addr = dyn_addr + mem::size_of::<Elf64_Dyn>() as i64;
+        }
+
+        Ok(s)
     }
 }

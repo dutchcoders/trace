@@ -64,7 +64,6 @@ mod bytebuf;
 use bytebuf::*;
 
 mod process;
-use process::*;
 
 // #[macro_use] extern crate text_io;
 #[macro_use]
@@ -104,6 +103,89 @@ pub struct link_map {
     pub l_prev: Elf64_Addr, // Chain of loaded objects.
 }
 
+fn dump_program_headers(process: &mut Process) {
+    let program_headers: HashMap<Elf64_Word, Elf64_Phdr> = process.program_headers().unwrap();
+
+    println!("Program headers");
+    println!("********");
+
+    for ph in program_headers.iter() {
+        println!("{:?}", ph);
+    }
+
+    println!("");
+    println!("");
+}
+
+fn dump_symbols(process: &mut Process) {
+    let symtab = *(process.sections(DT_SYMTAB).unwrap().first().unwrap());
+    let strtab = *(process.sections(DT_STRTAB).unwrap().first().unwrap());
+
+    println!("Symbols");
+    println!("********");
+
+    let mut offset = symtab;
+
+    // symbols
+    let mut sym = process.read_struct::<Elf64_Sym>(offset).expect("sym");
+    for n in 0..128 {
+        // ehdr.e_shnum {
+
+        let c_str2 = process.string_at(strtab + (sym.st_name as i64))
+            .expect("could not read string");
+        println!("{:?} {:x} {:?} {:?}", n, offset, sym, c_str2);
+
+        // st_name, st_value, offset?
+        offset = offset + mem::size_of::<Elf64_Sym>() as i64;
+        sym = process.read_struct::<Elf64_Sym>(offset).expect("sym");
+    }
+
+    println!("");
+}
+
+fn dump_relocations(process: &mut Process) {
+    let dt_jmprel = *(process.sections(DT_JMPREL).unwrap().first().unwrap());
+
+    // Relocation
+    println!("Relocations");
+    println!("********");
+
+    let mut offset = dt_jmprel;
+    let mut rela = process.read_struct::<Elf64_Rela>(offset).expect("rela");
+    for n in 0..128 {
+        // ehdr.e_shnum {
+        // type and offset
+        //
+        println!("Rela {:?} {:?} {:?} {:?} {:x}",
+                 n,
+                 rela,
+                 (rela.r_info >> 32),
+                 (rela.r_info & 0xffffffff),
+                 rela.r_offset);
+
+        offset = offset + mem::size_of::<Elf64_Sym>() as i64;
+        rela = process.read_struct::<Elf64_Rela>(offset).expect("sym");
+    }
+
+    println!("");
+}
+
+fn dump_needed(process: &mut Process) {
+    println!("Needed");
+    println!("********");
+
+    let strtab = *(process.sections(DT_STRTAB).unwrap().first().unwrap());
+    let needed = process.sections(DT_NEEDED).unwrap();
+    for s in needed.into_iter() {
+        let c_str2 = process.string_at(strtab + (s.as_voidptr() as i64))
+            .expect("could not read string");
+        println!("Needed: {:?}", c_str2);
+    }
+
+    println!("");
+}
+
+
 fn main() {
     let args: Args = Docopt::new(USAGE)
         .and_then(|d| d.decode())
@@ -115,9 +197,6 @@ fn main() {
     let filename = args.flag_command.unwrap();
 
     // dwarf::elf::load(&filename.clone()).expect("could not read dwarf data");
-
-    let engine = capstone::Capstone::new(capstone::CsArch::ARCH_X86, capstone::CsMode::MODE_64)
-        .expect("could not init engine");
 
     match fork().expect("fork failed") {
         ForkResult::Parent { child } => {
@@ -133,207 +212,24 @@ fn main() {
 
             let base_addr = InferiorPointer(0x400000);
 
-            if (!process.is_elf()) {
+            if !process.is_elf() {
                 println!("{}", Red.paint("Child is not an elf binary."));
                 return;
             }
 
-            // verify elf header
+            dump_program_headers(&mut process);
+
+            dump_needed(&mut process);
+
+            dump_symbols(&mut process);
+
+            dump_relocations(&mut process);
+
             let ehdr: Elf64_Ehdr = process.ehdr().unwrap();
 
-            println!("Elf header: {:x} {:?}", base_addr, ehdr);
-
-            println!("Program headers");
-            println!("********");
-
-            let mut program_headers: HashMap<Elf64_Word, Elf64_Phdr> = process.program_headers().unwrap();
-
-            for ph in program_headers.iter() {
-                println!("{:?}", ph);
-            }
-
-            println!("");
-
-            let mut dynamic_section = program_headers.get(&(PT_DYNAMIC as Elf64_Word))
-                .expect("pt_dynamic not found");
-
-            let mut dyn_addr = InferiorPointer(dynamic_section.p_vaddr as u64);
-
-            println!("");
-
-            println!("Dynamic section");
-            println!("********");
-
-            // dynamic section
-            let mut got = InferiorPointer(0);
-            let mut symtab = InferiorPointer(0);
-            let mut strtab = InferiorPointer(0);
-            let mut dt_jmprel = InferiorPointer(0);
-            let mut dt_pltrelsz = InferiorPointer(0);
-            let mut dt_pltrel = InferiorPointer(0);
-            let mut needed = vec![];
-
-            loop {
-                let dyn = process.read_struct::<Elf64_Dyn>(dyn_addr).expect("dyn");
-                println!("Elf header dyn {:?}", dyn);
-
-                if (dyn.d_tag == 0) {
-                    break;
-                } else if (dyn.d_tag == DT_STRTAB as i64) {
-                    strtab = inferior::InferiorPointer(dyn.d_ptr as u64); // + 0x400000;
-                } else if (dyn.d_tag == DT_SYMTAB as i64) {
-                    symtab = inferior::InferiorPointer(dyn.d_ptr as u64); // + 0x400000;
-                } else if (dyn.d_tag == DT_PLTGOT as i64) {
-                    got = inferior::InferiorPointer(dyn.d_ptr as u64); // + 0x400000;
-                } else if (dyn.d_tag == DT_NEEDED as i64) {
-                    needed.push(inferior::InferiorPointer(dyn.d_ptr as u64)); // + 0x400000;
-                } else if (dyn.d_tag == DT_JMPREL as i64) {
-                    dt_jmprel = inferior::InferiorPointer(dyn.d_ptr as u64); // + 0x400000;
-                } else if (dyn.d_tag == DT_PLTRELSZ as i64) {
-                    dt_pltrelsz = inferior::InferiorPointer(dyn.d_ptr as u64); // + 0x400000;
-                } else if (dyn.d_tag == DT_PLTREL as i64) {
-                    dt_pltrel = inferior::InferiorPointer(dyn.d_ptr as u64); // + 0x400000;
-                } else {
-                    println!("{:?}", dyn.d_ptr);
-                }
-
-                // process_dynamic_section / read_elf
-                // case DT_NULL	:
-                // case DT_NEEDED	:
-                // case DT_PLTGOT	:
-                // case DT_HASH	:
-                // case DT_STRTAB	:
-                // case DT_SYMTAB	:
-                // case DT_RELA	:
-                // case DT_INIT	:
-                // case DT_FINI	:
-                // case DT_SONAME	:
-                // case DT_RPATH	:
-                // case DT_SYMBOLIC:
-                // case DT_REL	:
-                // case DT_DEBUG	:
-                // case DT_TEXTREL	:
-                // case DT_JMPREL	:
-                // case DT_RUNPATH	:
-                //
-                dyn_addr = dyn_addr + mem::size_of::<Elf64_Dyn>() as i64;
-            }
-
-            println!("");
-
-            /*
-
-               // section headers are not loaded at runtime
-            println!("Section headers");
-            println!("********");
-
-            // e_shoff has invalid memory range. Only in file?
-            for n in 0..ehdr.e_shnum {
-
-                let base_addr2 = InferiorPointer(0x0061b000);
-
-                println!("offset {:x}",
-                         base_addr2 + ehdr.e_shoff as i64 +
-                         (n as u64 * ehdr.e_shentsize as u64) as i64);
-                let shdr = process.read_struct::<Elf64_External_Shdr>(base_addr2 + ehdr.e_shoff as i64 + (n as u64 * ehdr.e_shentsize as u64) as i64).expect("Could not read ");
-                println!("Section header {:?}", shdr);
-            }
-
-            println!("");
-            */
-
-            println!("Strtab: {:x} Symtab: {:x} Got: {:x} ", strtab, symtab, got);
-
-            // strtab
-            let c_str = process.string_at(strtab + 1 as i64).expect("could not read string");
-            println!("{:?}", c_str);
-
-            println!("Needed");
-            println!("********");
-
-            // needed
-            for s in needed.into_iter() {
-                let c_str2 = process.string_at(strtab + (s.as_voidptr() as i64))
-                    .expect("could not read string");
-                println!("Needed: {:?}", c_str2);
-            }
-
-            println!("");
-
-            println!("Symbols");
-            println!("********");
-
-            let mut offset = symtab;
-
-            // symbols
-            let mut sym = process.read_struct::<Elf64_Sym>(offset).expect("sym");
-            for n in 0..128 {
-                // ehdr.e_shnum {
-
-                let c_str2 = process.string_at(strtab + (sym.st_name as i64))
-                    .expect("could not read string");
-                println!("{:?} {:x} {:?} {:?}", n, offset, sym, c_str2);
-
-                // st_name, st_value, offset?
-                offset = offset + mem::size_of::<Elf64_Sym>() as i64;
-                sym = process.read_struct::<Elf64_Sym>(offset).expect("sym");
-            }
-
-            println!("");
-
-            // Relocation
-            let mut offset = dt_jmprel;
-            let mut rela = process.read_struct::<Elf64_Rela>(offset).expect("rela");
-            for n in 0..128 {
-                // ehdr.e_shnum {
-                // type and offset
-                //
-                println!("Rela {:?} {:?} {:?} {:?} {:x}",
-                         n,
-                         rela,
-                         (rela.r_info >> 32),
-                         (rela.r_info & 0xffffffff),
-                         rela.r_offset);
-
-                offset = offset + mem::size_of::<Elf64_Sym>() as i64;
-                rela = process.read_struct::<Elf64_Rela>(offset).expect("sym");
-            }
-
-            // got
-            // got[0] contains address that points to the dynamic segment of the executable, which
-            // is used by the dynamic linker for extracting dynamic linking-related information
-            // got[1] contains the address of the link_map structure that is used by the dynamic
-            // linker to resolve symbols
-            // got[2] contains the address to the dynamic links _dl_runtime_resolve() function that
-            // resolves the actual symbol address for the shared library function
-            //
-            // got = got + 0x8;
-            //
-            // println!("Link map:");
-            //
-            // let mut lm = process.read_struct::<link_map>(got).expect("lm");
-            // loop {
-            // println!("{:?} {:x} {:x} {:x} {:x}", lm, got, lm.l_addr, lm.l_prev, lm.l_next);
-            //
-            // if lm.l_name != 0 {
-            // let c_str2 = process.string_at(InferiorPointer(lm.l_name as u64)).expect("could not read string");
-            // println!("Linkmap: {:?}", c_str2);
-            // }
-            //
-            // lm = process.read_struct::<link_map>(InferiorPointer(lm.l_next)).expect("lm");
-            // }
-            //
-
-
-            let mut map_addr: u32 = process.read_struct::<u32>(got).expect("could not load got[1]");
-            println!("Map addr: Strtab: {:?} Symtab: {:?} Got: {:?} {:x}",
-                     strtab.as_voidptr(),
-                     symtab.as_voidptr(),
-                     got.as_voidptr(),
-                     map_addr);
-
-            let str2 = process.string_at(InferiorPointer(map_addr as u64));
-            println!("{:?} {:x}", str2, map_addr);
+            let symtab = *(process.sections(DT_SYMTAB).unwrap().first().unwrap());
+            let strtab = *(process.sections(DT_STRTAB).unwrap().first().unwrap());
+            let dt_jmprel = *(process.sections(DT_JMPREL).unwrap().first().unwrap());
 
             let mut next = 0;
             while Process::WIFSTOPPED(wait_status) {
@@ -366,6 +262,9 @@ fn main() {
 */
                 // check and record changed registers
 
+                let engine = capstone::Capstone::new(capstone::CsArch::ARCH_X86, capstone::CsMode::MODE_64)
+                    .expect("could not init engine");
+
                 match engine
                     .disasm(&raw_bytes, p.as_voidptr() as u64, 0) {
                         Some(insns) => {
@@ -375,6 +274,7 @@ fn main() {
                                 let size = i.size as u8;
                                 let bytes : &[u8] = unsafe { std::slice::from_raw_parts(i.bytes.as_ptr(), size as usize) };
 
+                                // jmp far
                                 if raw_bytes[0x0] == 0xff && raw_bytes[0x1] == 0x25 {
                                     // println!("{:} {:08x} {:<20} {:} {:}", curr_addr_map.map_or(String::from("unknown"), |m|m.path.clone()), p.as_voidptr() as u64, format!("{:2x}", ByteBuf(bytes)), i.mnemonic().unwrap(), i.op_str().unwrap());
                                     // println!("{:?}", i);
@@ -481,7 +381,8 @@ fn main() {
                         }
                     }
 
-                process.single_step();
+                process.single_step().unwrap();
+
                 wait_status = Process::wait();
             }
         }
@@ -491,7 +392,7 @@ fn main() {
             let c_filename = CString::new(filename).unwrap(); //.to_str().unwrap()).unwrap();
 
 
-            let mut args = &[c_filename];
+            let args = &[c_filename];
 
             execve(&args[0], args, &[])
                 .ok()
