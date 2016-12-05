@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Remco <remco@dutchcoders.io>"]
 
 [dependencies]
+elftools = { path = "/research/elftools-rust" }
 nix = "0.6.0"
 libc = "0.2.14"
 capstone = "0.0.4"

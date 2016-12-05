@@ -1,3 +1,5 @@
+// (partly) based on http://system.joekain.com/2015/09/07/refactoring-ptrace-code.html
+
 use libc::pid_t;
 use libc::c_void;
 
@@ -8,13 +10,13 @@ use std::ops::{Add, Sub};
 pub enum InferiorState {
     Running,
     Stopped,
-    SingleStepping
+    SingleStepping,
 }
 
 #[derive(Copy, Clone)]
 pub struct Inferior {
     pub pid: pid_t,
-    pub state: InferiorState
+    pub state: InferiorState,
 }
 
 pub type TrapInferior = pid_t;
@@ -23,9 +25,9 @@ pub type TrapInferior = pid_t;
 pub struct InferiorPointer(pub u64);
 
 impl InferiorPointer {
-    pub fn as_voidptr(&self) -> * mut c_void {
+    pub fn as_voidptr(&self) -> *mut c_void {
         let &InferiorPointer(u) = self;
-        u as * mut c_void
+        u as *mut c_void
     }
 }
 
