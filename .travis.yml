@@ -3,7 +3,8 @@ dist: xenial
 
 before_install:
   - sudo apt-get -qq update
-  - sudo apt-get install -y libcapstone-dev python python-pip
+  - sudo apt-get install -y python python-pip
+  - pip install capstone
   - pip install keystone-engine
 
 language: rust
