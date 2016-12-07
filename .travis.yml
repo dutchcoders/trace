@@ -1,16 +1,18 @@
 sudo: required
-dist: trusty
+dist: xenial
 
 before_install:
   - sudo apt-get -qq update
-  - sudo apt-get install -y libcapstone-dev
+  - sudo apt-get install -y libcapstone-dev python python-pip
   - pip install keystone-engine
 
 language: rust
+
 rust:
   - stable
   - beta
   - nightly
+
 matrix:
   allow_failures:
     - rust: nightly
