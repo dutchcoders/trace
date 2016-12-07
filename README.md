@@ -1,4 +1,4 @@
-System tracer in Rust
+# Tracer [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/dutchcoders/tracer?utm_source=badge&utm_medium=badge&utm_campaign=&utm_campaign=pr-badge&utm_content=badge) [![Go Report Card](https://goreportcard.com/badge/dutchcoders/tracer)](https://goreportcard.com/report/dutchcoders/tracer) [![Docker pulls](https://img.shields.io/docker/pulls/tracer/tracer.svg)](https://hub.docker.com/r/tracer/tracer/) [![Build Status](https://travis-ci.org/dutchcoders/tracer.svg?branch=master)](https://travis-ci.org/dutchcoders/tracer)
 
 The system tracer will show all syscalls (and assembly) that is being executed. This allows tracing of complete program flows. Tracer can be run for new processes, but also be attached to existing processes.
 
