@@ -1,5 +1,3 @@
-#![feature(custom_attribute)]
-
 extern crate nix;
 extern crate libc;
 extern crate capstone;
