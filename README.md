@@ -16,7 +16,6 @@ cargo run -- -a -c "/bin/ls"
 cargo run -- -a --pid 0
 `
 
-
 ## References
 
 * http://system.joekain.com/2015/07/15/rust-load-and-ptrace.html
