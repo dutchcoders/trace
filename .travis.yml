@@ -1,3 +1,8 @@
+before_install:
+  - sudo apt-get -qq update
+  - sudo apt-get install -y libcapstone-dev
+  - pip install keystone-engine
+
 language: rust
 rust:
   - stable
