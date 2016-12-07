@@ -1,8 +1,24 @@
-Writing a system tracer in Rust
+System tracer in Rust
 
-A system tracer for syscalls and assembly.
+The system tracer will show all syscalls (and assembly) that is being executed. This allows tracing of complete program flows. Tracer can be run for new processes, but also be attached to existing processes.
+
+# Usage
+
+## Start a new process
+
+`sh
+cargo run -- -a -c "/bin/ls"
+`
+
+## Connect to an existing process
+
+`sh
+cargo run -- -a --pid 0
+`
+
 
 ## References
+
 * http://system.joekain.com/2015/07/15/rust-load-and-ptrace.html
 * http://eli.thegreenplace.net/2011/01/23/how-debuggers-work-part-1
 * https://github.com/hoelzro/rust-execution-tracer/blob/master/posix.rs
@@ -17,21 +33,22 @@ A system tracer for syscalls and assembly.
 * http://www.tldp.org/LDP/LG/issue85/sandeep.html
 
 ## TODO
-// libbacktrace
-// add dwarf support
-// parse arguments, file get x64
-// diff changed register
-// check repetitions
-// disable colorcoding when piping
-// searching
-// filtering
-// all params
-// ptrace_syscall flag?
-// PT_DENY_ATTACH
-// dl_addr
-// /proc/%d/mem
-// /proc/%d/maps
-// https://github.com/djpnewton/libcorkscrew_ndk/blob/master/ptrace.c
-// load_symbol_table
-// http://osxr.org:8080/android/source/system/core/libcorkscrew/symbol_table.c
-// load_ptrace_context
+
+* libbacktrace
+* add dwarf support
+* parse arguments, file get x64
+* diff changed register
+* check repetitions
+* disable colorcoding when piping
+* searching
+* filtering
+* all params
+* ptrace_syscall flag?
+* PT_DENY_ATTACH
+* dl_addr
+* /proc/%d/mem
+* /proc/%d/maps
+* https://github.com/djpnewton/libcorkscrew_ndk/blob/master/ptrace.c
+* load_symbol_table
+* http://osxr.org:8080/android/source/system/core/libcorkscrew/symbol_table.c
+* load_ptrace_context
