@@ -6,7 +6,7 @@ The system tracer will show all syscalls, methods and optionally assembly that i
 
 ## Start a new process
 
-`sh
+```sh
 $ cargo run -- -a -c "/bin/ls"
 ...
 /bin/ls                                4021f0         ff254a9e2100 jmp localtime
@@ -23,13 +23,13 @@ $ cargo run -- -a -c "/bin/ls"
 /bin/ls                                402310           e970feffff jmp fclose
 unknown                          7fc465c63b0e                 0f05 syscall close( 3) ( fd: 01 )
 ...
-`
+```
 
 ## Connect to an existing process
 
-`sh
+```sh
 $ cargo run -- -a --pid 0
-`
+```
 
 ## References
 
