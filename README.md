@@ -1,19 +1,34 @@
 # Tracer [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/dutchcoders/tracer?utm_source=badge&utm_medium=badge&utm_campaign=&utm_campaign=pr-badge&utm_content=badge) [![Build Status](https://travis-ci.org/dutchcoders/tracer.svg?branch=master)](https://travis-ci.org/dutchcoders/tracer)
 
-The system tracer will show all syscalls (and assembly) that is being executed. This allows tracing of complete program flows. Tracer can be run for new processes, but also be attached to existing processes.
+The system tracer will show all syscalls, methods and optionally assembly that is being executed. This allows tracing of complete program flows. Tracer can be run for new processes, but also be attached to existing processes.
 
 # Usage
 
 ## Start a new process
 
 `sh
-cargo run -- -a -c "/bin/ls"
+$ cargo run -- -a -c "/bin/ls"
+...
+/bin/ls                                4021f0         ff254a9e2100 jmp localtime
+/bin/ls                                4021f0           6805000000 push localtime
+/bin/ls                                4021f0           e990ffffff jmp localtime
+/bin/ls                                4021f0         ff254a9e2100 jmp localtime
+/bin/ls                                4021f0           6805000000 push localtime
+/bin/ls                                4021f0           e990ffffff jmp localtime
+/bin/ls                                402270         ff250a9e2100 jmp __fpending
+/bin/ls                                402270           680d000000 push __fpending
+/bin/ls                                402270           e910ffffff jmp __fpending
+/bin/ls                                402310         ff25ba9d2100 jmp fclose
+/bin/ls                                402310           6817000000 push fclose
+/bin/ls                                402310           e970feffff jmp fclose
+unknown                          7fc465c63b0e                 0f05 syscall close( 3) ( fd: 01 )
+...
 `
 
 ## Connect to an existing process
 
 `sh
-cargo run -- -a --pid 0
+$ cargo run -- -a --pid 0
 `
 
 ## References

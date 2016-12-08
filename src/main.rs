@@ -229,6 +229,9 @@ fn main() {
             let strtab = *(process.sections(DT_STRTAB).unwrap().first().unwrap());
             let dt_jmprel = *(process.sections(DT_JMPREL).unwrap().first().unwrap());
 
+            let engine = capstone::Capstone::new(capstone::CsArch::ARCH_X86, capstone::CsMode::MODE_64)
+                .expect("could not init engine");
+
             let mut next = 0;
             while Process::WIFSTOPPED(wait_status) {
                 let p = process.rip().ok().expect("");
@@ -246,23 +249,6 @@ fn main() {
 
                 process.peek_text_bytes(p, &mut raw_bytes[0..]);
 
-/*
-                let info = unsafe {
-                    let mut info: Dl_info= mem::uninitialized();;
-
-                    dladdr(p.as_voidptr() as *const c_void, &mut info);
-                    info
-                };
-
-                println!("{:?}", info.dli_fname);
-                println!("{:?}", info.dli_sname);
-
-*/
-                // check and record changed registers
-
-                let engine = capstone::Capstone::new(capstone::CsArch::ARCH_X86, capstone::CsMode::MODE_64)
-                    .expect("could not init engine");
-
                 match engine
                     .disasm(&raw_bytes, p.as_voidptr() as u64, 0) {
                         Some(insns) => {
@@ -274,21 +260,15 @@ fn main() {
 
                                 // jmp far
                                 if raw_bytes[0x0] == 0xff && raw_bytes[0x1] == 0x25 {
-                                    // println!("{:} {:08x} {:<20} {:} {:}", curr_addr_map.map_or(String::from("unknown"), |m|m.path.clone()), p.as_voidptr() as u64, format!("{:2x}", ByteBuf(bytes)), i.mnemonic().unwrap(), i.op_str().unwrap());
-                                    // println!("{:?}", i);
-
                                     let address = byteorder::LittleEndian::read_u32(&raw_bytes[2..]) - 2;
-                                    // println!("{:x}", address);
+
                                     let mut ndx: u64 = 0;
 
                                     let mut offset = dt_jmprel;
                                     let mut rela = process.read_struct::<Elf64_Rela>(offset).expect("rela");
-                                    for n in 0..128 { //ehdr.e_shnum {
-                                        // type and offset
-                                        //
+                                    for n in 0..ehdr.e_shnum {
                                         if rela.r_offset == (p + address as i64).as_voidptr() as u64 {
-                                            // println!("Rela {:?} {:?} {:?} {:?} {:x}", n, rela, (rela.r_info >> 32), (rela.r_info & 0xffffffff), rela.r_offset);
-                                                ndx = (rela.r_info >> 32) + 1;
+                                            ndx = (rela.r_info >> 32) + 1;
                                         } else {
                                             // println!("Rela {:?} {:?} {:?} {:?} {:x} {:x}", n, rela, (rela.r_info >> 32), (rela.r_info & 0xffffffff), rela.r_offset, p + address as i64 + 2 as i64);
                                         }
@@ -306,37 +286,35 @@ fn main() {
 
                                     // symbols
                                     let mut sym = process.read_struct::<Elf64_Sym>(offset).expect("sym");
-                                    for n in 0..128 { //ehdr.e_shnum {
+                                    for n in 0..ehdr.e_shnum {
 
                                         let c_str2  = process.string_at(strtab + (sym.st_name as i64)).expect("could not read string");
-                                        if n == ndx {
+                                        if (n as u64) == ndx {
                                             // sym.st_shndx -> ref section header
 
                                             if (sym.st_info >> 4) == elftools::STB_WEAK as u8 {
-                                                println!("WEAK");
+                                                // println!("WEAK");
                                             } else if (sym.st_info >> 4) == elftools::STB_GLOBAL  as u8{
-                                                println!("GLOBAL");
+                                                // println!("GLOBAL {:}",  Red.paint(c_str2.clone()));
                                             } else if (sym.st_info >> 4) == elftools::STB_LOCAL  as u8{
-                                                println!("LOCAL");
+                                                // println!("LOCAL");
                                             }
 
                                             if (sym.st_info & 0xf) == elftools::STT_NOTYPE as u8 {
-                                                println!("NOTYPE");
+                                                // println!("NOTYPE");
                                             } else if (sym.st_info & 0xf) == elftools::STT_OBJECT  as u8{
-                                                println!("OBJECT");
+                                                // println!("OBJECT");
                                             } else if (sym.st_info & 0xf) == elftools::STT_FUNC  as u8{
-                                                println!("FUNC");
+                                                println!("{:<32} {:12x} {:>20} {:} {:}", curr_addr_map.map_or(String::from("unknown"), |m|m.path.clone()), p.as_voidptr() as u64, Yellow.paint(format!("{:>20}", format!("{:2x}", ByteBuf(bytes)))), Green.paint(i.mnemonic().unwrap()), c_str2.clone());
                                             } else if (sym.st_info & 0xf) == elftools::STT_SECTION  as u8{
-                                                println!("SECTIOn");
+                                                // println!("SECTIOn");
                                             } else if (sym.st_info & 0xf) == elftools::STT_FILE  as u8{
-                                                println!("FILE");
+                                                // println!("FILE");
                                             } else if (sym.st_info & 0xf) == elftools::STT_COMMON  as u8{
-                                                println!("COMMON");
+                                                // println!("COMMON");
                                             } else if (sym.st_info & 0xf) == elftools::STT_TLS  as u8{
-                                                println!("TLS");
+                                                // println!("TLS");
                                             }
-
-                                            println!("Symbol {:}", Red.paint(c_str2));
                                         }
 
                                         // st_name, st_value, offset?
@@ -344,6 +322,8 @@ fn main() {
                                         sym = process.read_struct::<Elf64_Sym>(offset).expect("sym");
                                     }
                                 } else if raw_bytes[0x0] == 0x0f && raw_bytes[0x1] == 0x05 {
+                                    // syscall
+
                                     // rax contains syscall number
                                     let rax = ptrace_util::get_rax(child).as_voidptr() as u16;
                                     let text = match syscalls64.iter().find(|&r|r.number == rax) {
@@ -352,30 +332,48 @@ fn main() {
                                     };
 
                                     // dump syscall
-                                    if rax == 2 {
+                                    if rax == 0 {
+                                        // read
+                                        let rdi = ptrace_util::get_rdi(child);
+                                        println!("{:<32} {:12x} {:>20} {:} {:}{:}({:2x}) ( fd: {:2x} )", curr_addr_map.map_or(String::from("unknown"), |m|m.path.clone()), p.as_voidptr() as u64, Yellow.paint(format!("{:>20}", format!("{:2x}", ByteBuf(bytes)))), Green.paint(i.mnemonic().unwrap()), i.op_str().unwrap(), text, rax, rdi);
+                                    } else if rax == 1 {
+                                        // write
+                                        let rdi = ptrace_util::get_rdi(child);
+                                        println!("{:<32} {:12x} {:>20} {:} {:}{:}({:2x}) ( fd: {:2x} )", curr_addr_map.map_or(String::from("unknown"), |m|m.path.clone()), p.as_voidptr() as u64, Yellow.paint(format!("{:>20}", format!("{:2x}", ByteBuf(bytes)))), Green.paint(i.mnemonic().unwrap()), i.op_str().unwrap(), text, rax, rdi);
+                                    } else if rax == 2 {
+                                        // open
+
                                         let rdi = ptrace_util::get_rdi(child);
                                         let rsi = ptrace_util::get_rsi(child);
                                         let rdx = ptrace_util::get_rdx(child);
 
-                                        println!("RDI: {:2x} RSI: {:2x} RDX: {:2x}", rdi, rsi, rdx);
+                                        let s = process.string_at(rdi);
+                                            println!("{:<32} {:12x} {:>20} {:} {:}{:}({:2x}) ( *filename: {:} )", curr_addr_map.map_or(String::from("unknown"), |m|m.path.clone()), p.as_voidptr() as u64, Yellow.paint(format!("{:>20}", format!("{:2x}", ByteBuf(bytes)))), Green.paint(i.mnemonic().unwrap()), i.op_str().unwrap(), text, rax, s.unwrap());
+                                    } else if rax == 3 {
+                                        // write
+                                        let rdi = ptrace_util::get_rdi(child);
+                                                println!("{:<32} {:12x} {:>20} {:} {:}{:}({:2x}) ( fd: {:2x} )", curr_addr_map.map_or(String::from("unknown"), |m|m.path.clone()), p.as_voidptr() as u64, Yellow.paint(format!("{:>20}", format!("{:2x}", ByteBuf(bytes)))), Green.paint(i.mnemonic().unwrap()), i.op_str().unwrap(), text, rax, rdi);
+                                    } else                                    if rax == 4 {
+                                        // stat
+
+                                        let rdi = ptrace_util::get_rdi(child);
+                                        let rsi = ptrace_util::get_rsi(child);
+                                        let rdx = ptrace_util::get_rdx(child);
 
                                         let s = process.string_at(rdi);
-                                        println!("{:?} RDI: {:2x} RSI: {:2x} RDX: {:2x}", s, rdi, rsi, rdx);
+                                                    println!("{:<32} {:12x} {:>20} {:} {:}{:}({:2x}) ( *filename: {:} )", curr_addr_map.map_or(String::from("unknown"), |m|m.path.clone()), p.as_voidptr() as u64, Yellow.paint(format!("{:>20}", format!("{:2x}", ByteBuf(bytes)))), Green.paint(i.mnemonic().unwrap()), i.op_str().unwrap(), text, rax, s.unwrap());
+                                    } else {
+                                                        println!("{:<32} {:12x} {:>20} {:} {:}{:}", curr_addr_map.map_or(String::from("unknown"), |m|m.path.clone()), p.as_voidptr() as u64, Yellow.paint(format!("{:>20}", format!("{:2x}", ByteBuf(bytes)))), Green.paint(i.mnemonic().unwrap()), i.op_str().unwrap(), text);
                                     }
-
-                                    println!("{:} {:08x} {:<20} {:} {:}{:}({:2x})", curr_addr_map.map_or(String::from("unknown"), |m|m.path.clone()), p.as_voidptr() as u64, format!("{:2x}", ByteBuf(bytes)), Yellow.paint(i.mnemonic().unwrap()), i.op_str().unwrap(), text, rax);
-                                } else {
-                                    if args.flag_assembly {
-                                    // println!("{:} {:08x} {:<20} {:} {:}{:}({:2x})", curr_addr_map.map_or("unknown", |m|m.path), p.as_voidptr() as u64, format!("{:2x}", ByteBuf(bytes)), Yellow.paint(i.mnemonic().unwrap()), i.op_str().unwrap(), text, rax);
-
-                                        println!("{:} {:08x} {:<20} {:} {:}", curr_addr_map.map_or(String::from("unknown"), |m|m.path.clone()), p.as_voidptr() as u64, format!("{:2x}", ByteBuf(bytes)), i.mnemonic().unwrap(), i.op_str().unwrap());
-                                    }
+                                    break;
                                 }
-                                break;
+                                if args.flag_assembly {
+                                    println!("{:<32} {:12x} {:>20} {:} {:}", curr_addr_map.map_or(String::from("unknown"), |m|m.path.clone()), p.as_voidptr() as u64, Yellow.paint(format!("{:>20}", format!("{:2x}", ByteBuf(bytes)))), i.mnemonic().unwrap(), i.op_str().unwrap());
+                                }
                             }
                         }
                         None => {
-                            println!("{:08x} {:x} FAILED", p.as_voidptr() as u64, ByteBuf(&raw_bytes));
+                            println!("{:12x} {:x} FAILED", p.as_voidptr() as u64, ByteBuf(&raw_bytes));
                         }
                     }
 
